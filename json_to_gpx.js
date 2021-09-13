@@ -37,6 +37,11 @@ const header = `<?xml version="1.0" encoding="UTF-8"?>
 
 const footer = `</TrainingCenterDatabase>`
 
+const total_distance = data.distance;
+const total_time = data.duration.slice(2);
+const calories = data.kiloCalories;
+const avg_hrm = data.averageHeartRate;
+const max_hrm = data.maximumHeartRate;
 
 const summary = `
         <DistanceMeters>${total_distance}</DistanceMeters>
@@ -52,41 +57,86 @@ const summary = `
         <TriggerMethod>Manual</TriggerMethod>
 `
 
-const distance_meters = distance ? `<DistanceMeters>${distance}</DistanceMeters>` : '';
-const time = timestamp ? `<Time>${timestamp}</Time>` : '';
-const position = latitude && longitude ? `<Position>
-                <LatitudeDegrees>${latitude}</LatitudeDegrees>
-                <LongitudeDegrees>${longitude}</LongitudeDegrees>
-              </Position>` : '';
-const altitude_meters = altitude ? `<AltitudeMeters>${altitude}</AltitudeMeters>` : '';
-const heart_rate = hrm ? `<HeartRateBpm>
-                  <Value>${hrm}</Value>
-              </HeartRateBpm>` : '';
+const samples = [];
 
+for (const alt of data.exercises[0].samples.altitude) {
+  samples.push({date: new Date(alt.dateTime), altitude: alt.value });
+}
+
+for (const hrm of data.exercises[0].samples.heartRate) {
+  samples.push({date: new Date(hrm.dateTime), heartrate: hrm.value });
+}
+
+for (const dist of data.exercises[0].samples.distance) {
+  samples.push({date: new Date(dist.dateTime), altitude: dist.value });
+}
+
+for (const rr of data.exercises[0].samples.recordedRoute) {
+  samples.push({date: new Date(rr.dateTime), altitude: rr.altitude, longitude: rr.longitude, latitude: rr.latitude });
+}
+
+// data.samples.speed
+// data.samples.candence
+// data.samples.temperature
+// data.samples.leftPedalCrankBasedPower
+
+samples.sort((a,b) => a.date.getTime() - b.date.getTime());
 
 const trackpoints = [];
 
-const trackpoint = `
-          <Trackpoint>
-            ${distance_meters} 
-            ${time}
-            ${position}
-            ${altitude_meters} 
-            ${heart_rate}
-          </Trackpoint>`
+for (let i = 0; i < samples.length; ) {
+  let s = samples[i];
+  let d = s.date;
+  let distance_meters = '';
+  let time = '';
+  let position = '';
+  let altitude_meters = '';
+  let heart_rate = '';
+
+  while (s && d.getTime() === s.date.getTime()) {
+    if (s.distance) distance_meters = `<DistanceMeters>${s.distance}</DistanceMeters>`;
+    if (s.date) time = `<Time>${s.date.toISOString()}</Time>`;
+    if (s.latitude && s.longitude) position = `<Position>
+                <LatitudeDegrees>${s.latitude}</LatitudeDegrees>
+                <LongitudeDegrees>${s.longitude}</LongitudeDegrees>
+              </Position>`;
+    if (s.altitude) altitude_meters = `<AltitudeMeters>${s.altitude}</AltitudeMeters>`;
+    if (s.heartrate) heart_rate = `<HeartRateBpm>
+                 <Value>${s.heartrate}</Value>
+               </HeartRateBpm>`;
+
+    i++;
+    s = samples[i];
+  }
+
+  const trackpoint = `
+            <Trackpoint>
+              ${distance_meters} 
+              ${time}
+              ${position}
+              ${altitude_meters} 
+              ${heart_rate}
+            </Trackpoint>`
+
+  trackpoints.push(trackpoint);
+}
 
 const track = `
         <Track>
 ${trackpoints.join('')}
         </Track>
 `
+
+const atype = data.exercises[0].sport;
+const timestamp = new Date(data.exercises[0].startTime).toISOString();
+const start_time = new Date(data.exercises[0].startTime).toISOString();
  
 const activity =  `
   <Activities>
-    <Activity Sport="${type}">
+    <Activity Sport="${atype}">
       <Id>${timestamp}</Id>
       <Lap StartTime="${start_time}">
-        ${tracks}
+        ${track}
         ${summary}
       </Lap>
     </Activity>
@@ -94,7 +144,8 @@ const activity =  `
 `
 
 const tcx = `${header}${activity}${footer}`;
- 
+
+/*
 for (let i = 0, ii = data.exercises[0].samples.recordedRoute.length; i < ii; i++) {
   const trackPoint = data.exercises[0].samples.recordedRoute[i];
   const lat = trackPoint.latitude;
@@ -105,7 +156,7 @@ for (let i = 0, ii = data.exercises[0].samples.recordedRoute.length; i < ii; i++
   gpx += '<trkpt lat="' + lat + '" lon="' + lon + '">' + '<ele>' + ele + '</ele>' + '<time>' + time + '</time>' + ( hrm ? '<extensions><gpxtpx:TrackPointExtension><gpxtpx:hr>' + hrm + '</gpxtpx:hr></gpxtpx:TrackPointExtension></extensions>' : '' ) + '</trkpt>';
 }
 
-gpx += '</trkseg>' + '</trk>' + '</gpx>';
+gpx += '</trkseg>' + '</trk>' + '</gpx>'; */
 
 // console.log(gpx);
-fs.writeFileSync(outfile, gpx);
+fs.writeFileSync(outfile, tcx);
